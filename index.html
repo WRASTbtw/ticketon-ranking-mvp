@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ранжирование витрин — MVP</title>
+  <meta name="description" content="MVP системы ранжирования событий для витрин Ticketon: отбор, оценка, правила и A/B-симуляция на синтетических данных.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6bff'/%3E%3Cpath d='M9 22V10h7a4 4 0 0 1 0 8h-7m7 0 5 4' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">R</span>
+      <div>
+        <h1>Ранжирование витрин</h1>
+        <p>MVP для Ticketon · данные синтетические</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Разделы">
+      <button role="tab" data-tab="showcase" aria-selected="true">Витрина</button>
+      <button role="tab" data-tab="ab" aria-selected="false">A/B-симуляция</button>
+      <button role="tab" data-tab="log" aria-selected="false">Лог выдачи</button>
+      <button role="tab" data-tab="about" aria-selected="false">О проекте</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-showcase" class="tab" role="tabpanel">
+      <div class="controls">
+        <label class="field">Город <select id="city"></select></label>
+        <label class="field">Витрина <select id="surface"></select></label>
+        <div class="field grow">
+          <span>Кто смотрит</span>
+          <div class="segmented" id="visitors" role="radiogroup" aria-label="Посетитель"></div>
+        </div>
+      </div>
+
+      <div class="knowledge" id="knowledge"></div>
+
+      <div class="layout">
+        <div class="col col-base">
+          <div class="col-head">
+            <h2>Сейчас</h2>
+            <p>По ближайшему сеансу, без правил</p>
+          </div>
+          <ol class="cards" id="baseline"></ol>
+        </div>
+        <div class="col col-ours">
+          <div class="col-head">
+            <h2>Наша система</h2>
+            <p id="ours-sub"></p>
+          </div>
+          <div class="fallback-note" id="fallback-note" hidden></div>
+          <ol class="cards" id="ours"></ol>
+        </div>
+        <aside class="side">
+          <div class="panel" id="explain"></div>
+          <div class="panel" id="rules">
+            <h3>Правила</h3>
+            <label class="check"><input type="checkbox" data-rule="dedupe" checked> Склейка дублей</label>
+            <label class="check"><input type="checkbox" data-rule="diversity" checked> Разнообразие категорий и площадок</label>
+            <label class="check"><input type="checkbox" data-rule="explore" checked> Места для новинок</label>
+            <label class="check"><input type="checkbox" data-rule="pins" checked> Закрепления и промо</label>
+            <div class="slider">
+              <label for="alpha">Поправка на чек, α = <output id="alpha-out">0.3</output></label>
+              <input type="range" id="alpha" min="0" max="1" step="0.1" value="0.3">
+              <small>0 — больше покупок, 1 — больше выручки</small>
+            </div>
+            <label class="check danger"><input type="checkbox" id="fail"> Сымитировать сбой сервиса</label>
+          </div>
+          <div class="panel" id="removed"></div>
+        </aside>
+      </div>
+      <div class="more-row"><button class="btn ghost" id="more">Показать ещё 12</button></div>
+    </section>
+
+    <section id="tab-ab" class="tab" role="tabpanel" hidden>
+      <div class="ab-intro">
+        <h2>A/B-симуляция</h2>
+        <p>Синтетические посетители открывают листинг любимой категории в своём городе и листают его.
+          Половина видит текущий порядок — по ближайшему сеансу, как сейчас устроены листинги, — половина видит наш.
+          У каждого есть скрытые вкусы и бюджет: система их не видит и узнаёт о человеке только по кликам визита и истории покупок.</p>
+      </div>
+      <div class="ab-controls">
+        <label class="field">Визитов
+          <select id="ab-n">
+            <option value="2000">2 000</option>
+            <option value="6000" selected>6 000</option>
+            <option value="12000">12 000</option>
+          </select>
+        </label>
+        <button class="btn" id="ab-run">Запустить симуляцию</button>
+        <progress id="ab-progress" max="1" value="0" hidden></progress>
+      </div>
+      <div id="ab-results"></div>
+      <p class="caveat">Это проверка механики, а не прогноз прироста: вкусы посетителей задали мы сами.
+        Реальный эффект покажет только A/B-тест на трафике Ticketon. Правила и α берутся из вкладки «Витрина».</p>
+    </section>
+
+    <section id="tab-log" class="tab" role="tabpanel" hidden>
+      <div class="log-head">
+        <h2>Лог последней выдачи</h2>
+        <p>Такая запись сохраняется на каждый показ витрины. Позже к ней привязываются клики и покупки,
+          и из этих записей обучается модель. <code>propensity</code> — вероятность, с которой система выбрала
+          событие на этой позиции: нужна, чтобы честно оценивать новые версии модели на старых логах.</p>
+      </div>
+      <pre id="log-json"></pre>
+    </section>
+
+    <section id="tab-about" class="tab about" role="tabpanel" hidden>
+      <h2>Что здесь показано</h2>
+      <p>Прототип системы, которая для каждого показа витрины подбирает и упорядочивает события под посетителя и контекст,
+        соблюдает правила бизнеса и логирует выдачу для обучения и A/B-тестов.</p>
+      <ol class="steps-list">
+        <li><b>Отбор.</b> Из событий города убираем прошедшие, распроданные и закрытые.</li>
+        <li><b>Оценка.</b> Для каждого кандидата: вероятность покупки × чек<sup>α</sup>. Вероятность складывается из сигналов:
+          спрос, дата, контекст, клики визита, похожие события, история покупок.</li>
+        <li><b>Правила.</b> Склейка дублей, разнообразие, места для новинок, закрепления и промо.</li>
+      </ol>
+      <h3>Как смотреть демо</h3>
+      <ul>
+        <li>Переключайте посетителя: от нового гостя до авторизованного зрителя театра — порядок меняется.</li>
+        <li>Нажимайте на карточки: клик учитывается в визите, витрина пересобирается, справа появляется разбор оценки.</li>
+        <li>Выключайте правила и двигайте α — видно, за что отвечает каждое правило.</li>
+        <li>Включите «сбой сервиса»: витрина не пустеет, а получает запасной порядок.</li>
+      </ul>
+      <h3>Что синтетическое</h3>
+      <p>Города настоящие, события, площадки, артисты и все цифры — вымышленные. Даты считаются от момента открытия страницы.
+        В MVP оценка — прозрачная формула с весами. На пилоте те же сигналы станут признаками модели CatBoost,
+        обученной на логах Ticketon, а движок переедет в сервис с API.</p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p class="noscript">Для демо нужен включённый JavaScript.</p></noscript>
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
